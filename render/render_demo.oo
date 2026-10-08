@@ -1,0 +1,64 @@
+// # Host Resolver Interactive Demonstration Showcase
+//
+// Logline: Renders forward, reverse, and diagnostic DNS host resolution scenarios.
+//
+// Setup: Pure string demonstration generator highlighting dual-surface parity.
+//
+// Beats:
+//   1. Showcase forward A and AAAA host address resolution.
+//   2. Showcase reverse in-addr.arpa pointer resolution.
+//   3. Showcase mail exchange and custom record querying.
+//   4. Showcase terse pipeline formatting and structured JSON telemetry.
+
+import "core/host_types.oo";
+import "render/render_bind.oo";
+import "render/render_json.oo";
+
+fn ansi_esc() -> String {
+    return bytes_to_str(bytes_push(bytes_new(), 27));
+}
+
+pub fn render_demo_showcase(use_color: Bool) -> String {
+    let esc: String = ansi_esc();
+    let mut out: String = "";
+
+    let title: String = if use_color {
+        esc + "[1;38;5;51m================================================================================\n"
+            + "                 oohost: Sovereign openOODA Host Resolver Demo                  \n"
+            + "================================================================================\n" + esc + "[0m\n"
+    } else {
+        "================================================================================\n"
+            + "                 oohost: Sovereign openOODA Host Resolver Demo                  \n"
+            + "================================================================================\n\n"
+    };
+    out = out + title;
+
+    // 1. Forward DNS resolution
+    out = out + (if use_color { esc + "[1m--- 1. Forward Resolution (Hostname -> IPv4 / IPv6) ---\n" + esc + "[0m" } else { "--- 1. Forward Resolution (Hostname -> IPv4 / IPv6) ---\n" });
+    let mut resp1: HostResponse = empty_host_response("example.com", "A");
+    resp1.records = list_push(resp1.records, make_host_record("example.com", 300, "IN", "A", "93.184.215.14"));
+    resp1.records = list_push(resp1.records, make_host_record("example.com", 300, "IN", "AAAA", "2606:2800:21f:cb07:6820:80da:af6b:8b2c"));
+    out = out + render_response_bind(resp1, false, false, use_color) + "\n";
+
+    // 2. Reverse PTR resolution
+    out = out + (if use_color { esc + "[1m--- 2. Reverse Lookup (IP Address -> PTR Hostname) ---\n" + esc + "[0m" } else { "--- 2. Reverse Lookup (IP Address -> PTR Hostname) ---\n" });
+    let mut resp2: HostResponse = empty_host_response("93.184.215.14", "PTR");
+    resp2.records = list_push(resp2.records, make_host_record("14.215.184.93.in-addr.arpa", 86400, "IN", "PTR", "93-184-215-14.example.com."));
+    out = out + render_response_bind(resp2, false, false, use_color) + "\n";
+
+    // 3. Mail Exchange (MX)
+    out = out + (if use_color { esc + "[1m--- 3. Specific Record Query (MX Mail Handlers) ---\n" + esc + "[0m" } else { "--- 3. Specific Record Query (MX Mail Handlers) ---\n" });
+    let mut resp3: HostResponse = empty_host_response("example.com", "MX");
+    resp3.records = list_push(resp3.records, make_host_record("example.com", 3600, "IN", "MX", "10 mail.example.com."));
+    out = out + render_response_bind(resp3, false, false, use_color) + "\n";
+
+    // 4. Terse Short Mode
+    out = out + (if use_color { esc + "[1m--- 4. Terse Pipeline Mode (-s / --short) ---\n" + esc + "[0m" } else { "--- 4. Terse Pipeline Mode (-s / --short) ---\n" });
+    out = out + render_response_bind(resp1, true, false, use_color) + "\n";
+
+    // 5. Structured JSON Telemetry
+    out = out + (if use_color { esc + "[1m--- 5. Structured JSON Telemetry (-j / --json) ---\n" + esc + "[0m" } else { "--- 5. Structured JSON Telemetry (-j / --json) ---\n" });
+    out = out + response_to_json(resp1) + "\n";
+
+    return out;
+}

@@ -4,7 +4,7 @@
 # "Removes oohost binary, package installations, and cache."
 #
 # Usage:
-#   curl -fsSL https://openooda-toohost.github.io/oohost/uninstall.sh | bash
+#   curl -fsSL https://openooda-tools.github.io/oohost/uninstall.sh | bash
 #   or: ./uninstall.sh [options]
 #
 # Options:

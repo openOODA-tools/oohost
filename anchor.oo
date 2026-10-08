@@ -1,13 +1,28 @@
-// # oohost Root Anchor
+// # Root Verification Anchor for oohost
 //
-// Logline: Top-level anchor re-exporting options, core logic, render, and ipc subsystems.
+// Logline: Top-level integration test orchestrating core, render, and ipc subsystem anchors.
 //
-// Setup: Pure shim re-exporting all oohost subsystem anchors.
+// Setup: Demands zero ambient authority, verifying host parsing, record formatting, and CLI flags.
 //
 // Beats:
-//   1. Re-export options parsing subsystem.
-//   2. Re-export core oohost execution engine.
-//   3. Re-export render formatting subsystem.
-//   4. Re-export Model Context Protocol (MCP) IPC subsystem.
+//   1. Verify core IP classification and DNS host resolution.
+//   2. Verify render subsystem BIND syntax and JSON serialization.
+//   3. Verify ipc subsystem argument parsing and JSON decoding.
+//   4. Export top-level system verification routine for test harness.
 
-import "main.oo";
+import "core/anchor.oo";
+import "render/anchor.oo";
+import "ipc/anchor.oo";
+
+pub fn verify_all() -> Bool {
+    if verify_core() == false {
+        return false;
+    }
+    if verify_render() == false {
+        return false;
+    }
+    if verify_ipc() == false {
+        return false;
+    }
+    return true;
+}

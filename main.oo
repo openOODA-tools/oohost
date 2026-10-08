@@ -1,52 +1,103 @@
-// # oohost Main Entry Point
+// # oohost Main Entry Point - Sovereign DNS Host Resolver
 //
 // Logline: Quick DNS address resolver performing forward and reverse host conversions.
 //
-// Setup: Demands explicit capability tokens and standard argument list.
+// Setup: Demands FsReadCap, ProcessCap, and EnvCap tokens without ambient privileges.
 //
 // Beats:
-//   1. Parse command-line options and dispatch --help, --version, or --mcp.
-//   2. Execute capability-bounded oohost operations.
-//   3. Format and output structured results to standard output.
+//   1. Dispatch early execution modes (--help, --version, --test, --demo, --mcp).
+//   2. Parse positional target domain, reverse IP, and optional nameserver.
+//   3. Execute capability-bounded DNS resolution under FsReadCap.
+//   4. Format and emit standard BIND host output, terse text, or structured JSON.
+
+import "core/host_types.oo";
+import "core/host_resolver.oo";
+import "render/render_bind.oo";
+import "render/render_json.oo";
+import "render/render_demo.oo";
+import "ipc/cli_options.oo";
+import "ipc/mcp_server.oo";
+import "anchor.oo";
 
 fn render_help() -> String {
-    return "oohost 0.1.0 (openOODA sovereign network & egress)\n"
-        + "usage: oohost [options] [ARGUMENTS]...\n\n"
+    return "oohost 0.2.0 (openOODA sovereign network & egress)\n"
+        + "usage: oohost [options] host [server]\n\n"
         + "Quick DNS address resolver performing forward and reverse host conversions.\n\n"
         + "Options:\n"
+        + "  -a, -C               equivalent to -t ANY (query all available records)\n"
+        + "  -s, --short          terse output: emit only resolved addresses and domain names\n"
+        + "  -t, --type <TYPE>    query specified record type (A, AAAA, MX, TXT, CNAME, NS, SOA, ANY)\n"
+        + "  -r, --reverse        perform reverse DNS query for IP address\n"
+        + "      --server <IP>    specify custom DNS server to query\n"
+        + "  -v, --verbose        verbose output with query latency and server statistics\n"
+        + "      --no-color       suppress ANSI color sequences\n"
+        + "  -j, --json           emit structured RFC 8259 JSON Lines\n"
+        + "  -D, --demo           run interactive DNS resolution demonstration showcase\n"
+        + "      --test           run internal verification anchor self-test suite\n"
         + "  -h, --help           display this help and exit\n"
-        + "  -v, --version        output version information and exit\n"
-        + "      --json           output formatted as JSON Lines\n"
-        + "      --color <WHEN>   colorize output: auto, always, never [default: auto]\n"
-        + "      --theme <NAME>   override active oote palette\n"
+        + "      --version        output version information and exit\n"
         + "      --mcp            run as Model Context Protocol stdio server\n";
 }
 
 fn render_version() -> String {
-    return "oohost 0.1.0 (openOODA sovereign network & egress)\n";
+    return "oohost 0.2.0 (openOODA sovereign network & egress)\n";
 }
 
-fn main(args: List[String]) -> Int {
-    let num_args: Int = list_len(args);
-    let mut i: Int = 0;
+pub fn main(
+    fr: &FsReadCap,
+    _pr: &ProcessCap,
+    _env: &EnvCap,
+    args: List[String]
+) -> Int {
+    let opts: CliParsedOptions = parse_cli_options(args);
 
-    while i < num_args {
-        let arg: String = list_get(args, i);
-        if arg == "-h" || arg == "--help" {
-            print(render_help());
+    if opts.help {
+        print(render_help());
+        return 0;
+    }
+    if opts.version {
+        print(render_version());
+        return 0;
+    }
+    if opts.test {
+        if verify_all() {
+            println("OK: all tests passed");
             return 0;
+        } else {
+            println("FAIL: verification error");
+            return 1;
         }
-        if arg == "-v" || arg == "--version" {
-            print(render_version());
-            return 0;
-        }
-        if arg == "--mcp" {
-            print("{\"jsonrpc\":\"2.0\",\"result\":{\"status\":\"ready\",\"tool\":\"oohost\"}}\n");
-            return 0;
-        }
-        i = i + 1;
+    }
+    if opts.demo {
+        print(render_demo_showcase(opts.color));
+        return 0;
+    }
+    if opts.mcp {
+        run_mcp_server(fr);
+        return 0;
     }
 
-    print("oohost: sovereign capability-bounded utility ready\n");
-    return 0;
+    if chars_len(opts.target) == 0 {
+        println("oohost: no host specified (use -h for help)");
+        return 1;
+    }
+
+    let mut h_opts: HostOpts = default_host_opts();
+    h_opts.target = opts.target;
+    h_opts.server = opts.server;
+    h_opts.port = opts.port;
+    h_opts.rtype = opts.rtype;
+    h_opts.short_mode = opts.short_mode;
+    h_opts.verbose = opts.verbose;
+    h_opts.all_records = opts.all_records;
+    h_opts.is_reverse = opts.is_reverse;
+
+    let resp: HostResponse = resolve_host(fr, h_opts);
+    if opts.json {
+        println(response_to_json(resp));
+    } else {
+        print(render_response_bind(resp, opts.short_mode, opts.verbose, opts.color));
+    }
+
+    return if resp.is_error { 1 } else { 0 };
 }

@@ -1,0 +1,89 @@
+// # Reverse DNS Pointer and IP Address Utilities
+//
+// Logline: Converts IPv4 and IPv6 network addresses into in-addr.arpa and ip6.arpa PTR query names.
+//
+// Setup: Pure string manipulation routines for IP classification and nibble reversing.
+//
+// Beats:
+//   1. Classify strings as IPv4 dotted-quad or IPv6 colon-hexadecimal notations.
+//   2. Reverse dotted-quad IPv4 octets into canonical in-addr.arpa pointer names.
+//   3. Expand and reverse IPv6 hexadecimal address nibbles into ip6.arpa pointer names.
+//   4. Export general IP detection predicate for automatic reverse lookup dispatch.
+
+pub fn is_ipv4(s: String) -> Bool {
+    let n: Int = chars_len(s);
+    if n < 7 || n > 15 { return false; }
+    let mut dots: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        let b: Int = ord(c);
+        if c == "." {
+            dots = dots + 1;
+        } else if b < 48 || b > 57 {
+            return false;
+        }
+        i = i + 1;
+    }
+    return dots == 3;
+}
+
+pub fn is_ipv6(s: String) -> Bool {
+    let n: Int = chars_len(s);
+    if n < 2 || n > 45 { return false; }
+    let mut colons: Int = 0;
+    let mut i: Int = 0;
+    while i < n {
+        let c: String = char_at(s, i);
+        let b: Int = ord(c);
+        if c == ":" {
+            colons = colons + 1;
+        } else {
+            let is_digit: Bool = b >= 48 && b <= 57;
+            let is_hex_lo: Bool = b >= 97 && b <= 102;
+            let is_hex_up: Bool = b >= 65 && b <= 70;
+            if is_digit == false && is_hex_lo == false && is_hex_up == false && c != "." {
+                return false;
+            }
+        }
+        i = i + 1;
+    }
+    return colons >= 2;
+}
+
+pub fn is_ip_address(s: String) -> Bool {
+    if is_ipv4(s) { return true; }
+    if is_ipv6(s) { return true; }
+    return false;
+}
+
+pub fn format_ipv4_reverse(ip: String) -> String {
+    let parts: List[String] = str_split(ip, ".");
+    if list_len(parts) != 4 {
+        return ip;
+    }
+    let p0: String = list_get(parts, 0);
+    let p1: String = list_get(parts, 1);
+    let p2: String = list_get(parts, 2);
+    let p3: String = list_get(parts, 3);
+    return p3 + "." + p2 + "." + p1 + "." + p0 + ".in-addr.arpa";
+}
+
+pub fn format_ipv6_reverse(ip: String) -> String {
+    // Basic ip6.arpa formatter: reverse characters, filtering out colons
+    let n: Int = chars_len(ip);
+    let mut nibbles: String = "";
+    let mut i: Int = n - 1;
+    while i >= 0 {
+        let c: String = char_at(ip, i);
+        if c != ":" {
+            if chars_len(nibbles) > 0 {
+                nibbles = nibbles + "." + c;
+            } else {
+                nibbles = c;
+            }
+        }
+        i = i - 1;
+    }
+    return nibbles + ".ip6.arpa";
+}

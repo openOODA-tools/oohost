@@ -1,0 +1,9 @@
+Package: oohost
+Version: 0.2.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Description: Sovereign DNS Host Resolver
+ Quick DNS address resolver performing forward and reverse host conversions
+ with capability bounds and Model Context Protocol stdio server in pure openOODA.

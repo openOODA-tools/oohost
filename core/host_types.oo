@@ -1,0 +1,85 @@
+// # Host Record and Query Data Models
+//
+// Logline: Data structures defining DNS records, query configuration, and resolution telemetry.
+//
+// Setup: Pure data models without external library dependencies for host and address lookups.
+//
+// Beats:
+//   1. Define HostRecord containing name, ttl, class, record type, and rdata.
+//   2. Define HostResponse holding query target, server, status, records, and latency.
+//   3. Define HostOpts for CLI flags, query types, server overrides, and display modes.
+//   4. Export constructor helpers for immutable record instantiation.
+
+pub type HostRecord = struct {
+    name: String,
+    ttl: Int,
+    class_name: String,
+    rtype: String,
+    data: String
+};
+
+pub fn make_host_record(
+    name: String,
+    ttl: Int,
+    class_name: String,
+    rtype: String,
+    data: String
+) -> HostRecord {
+    return HostRecord {
+        name: name,
+        ttl: ttl,
+        class_name: class_name,
+        rtype: rtype,
+        data: data
+    };
+}
+
+pub type HostResponse = struct {
+    target: String,
+    query_type: String,
+    server: String,
+    port: Int,
+    status: String,
+    records: List[HostRecord],
+    latency_ms: Int,
+    is_error: Bool,
+    error_msg: String
+};
+
+pub fn empty_host_response(target: String, qtype: String) -> HostResponse {
+    return HostResponse {
+        target: target,
+        query_type: qtype,
+        server: "",
+        port: 53,
+        status: "NOERROR",
+        records: list_new(),
+        latency_ms: 0,
+        is_error: false,
+        error_msg: ""
+    };
+}
+
+pub type HostOpts = struct {
+    target: String,
+    server: String,
+    port: Int,
+    rtype: String,
+    short_mode: Bool,
+    verbose: Bool,
+    all_records: Bool,
+    is_reverse: Bool
+};
+
+pub fn default_host_opts() -> HostOpts {
+    return HostOpts {
+        target: "",
+        server: "",
+        port: 53,
+        rtype: "A",
+        short_mode: false,
+        verbose: false,
+        all_records: false,
+        is_reverse: false
+    };
+}

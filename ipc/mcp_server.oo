@@ -1,0 +1,126 @@
+// # Model Context Protocol (MCP) Stdio Server for oohost
+//
+// Logline: Streaming JSON-RPC 2.0 stdio server providing DNS host resolution and inspection tools.
+//
+// Setup: Demands FsReadCap for system nameserver inspection and hosts overrides.
+//
+// Beats:
+//   1. Process incoming JSON-RPC 2.0 requests over standard input stream.
+//   2. Dispatch initialize, tools/list, and tools/call protocol frames.
+//   3. Implement host_resolve, host_reverse, host_records, host_inspect, and host_demo tools.
+//   4. Emit capability-bounded JSON-RPC responses for AI agents.
+
+import "core/host_types.oo";
+import "core/host_resolver.oo";
+import "render/render_bind.oo";
+import "render/render_demo.oo";
+import "ipc/json_field.oo";
+
+pub fn run_mcp_server(fs: &FsReadCap) {
+    let mut running: Bool = true;
+    while running {
+        let line_res: Result[String, String] = oo_read_stdin_chunk(fs, 8192);
+        if !line_res.is_ok() {
+            running = false;
+        } else {
+            let line: String = match line_res { Ok(s) => s, Err(_) => "" };
+            let trimmed: String = str_trim(line);
+            if chars_len(trimmed) == 0 {
+                running = false;
+            } else {
+                let id: String = json_get_field(trimmed, "id");
+                let method: String = json_get_string(trimmed, "method");
+
+                if method == "initialize" {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"protocolVersion\":\"2024-11-05\"," +
+                        "\"serverInfo\":{\"name\":\"oohost\",\"version\":\"0.2.0\"}," +
+                        "\"capabilities\":{\"tools\":{}}}}";
+                    println(resp);
+                } else if method == "notifications/initialized" {
+                    // ack
+                } else if method == "tools/list" {
+                    let t1: String = "{\"name\":\"host_resolve\",\"description\":\"Resolve hostname to IPv4 (A) and IPv6 (AAAA) addresses\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\",\"description\":\"Domain name or hostname\"}},\"required\":[\"target\"]}}";
+                    let t2: String = "{\"name\":\"host_reverse\",\"description\":\"Perform reverse DNS lookup for an IPv4 or IPv6 address to retrieve PTR hostname\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"ip\":{\"type\":\"string\",\"description\":\"IPv4 or IPv6 address\"}},\"required\":[\"ip\"]}}";
+                    let t3: String = "{\"name\":\"host_records\",\"description\":\"Query specific DNS records for a domain (MX, TXT, NS, SOA, CNAME, ANY)\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\",\"description\":\"Domain name\"},\"type\":{\"type\":\"string\",\"description\":\"Record type\"}},\"required\":[\"target\"]}}";
+                    let t4: String = "{\"name\":\"host_inspect\",\"description\":\"Inspect full DNS diagnostic response including nameserver, TTLs, and query latency\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{\"target\":{\"type\":\"string\",\"description\":\"Domain name or IP address\"},\"server\":{\"type\":\"string\",\"description\":\"Optional custom nameserver\"}},\"required\":[\"target\"]}}";
+                    let t5: String = "{\"name\":\"host_demo\",\"description\":\"Run demonstration showcase of sovereign DNS host resolution\"," +
+                        "\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}";
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"result\":{\"tools\":[" + t1 + "," + t2 + "," + t3 + "," + t4 + "," + t5 + "]}}";
+                    println(resp);
+                } else if method == "tools/call" {
+                    let params: String = json_get_field(trimmed, "params");
+                    let tool_name: String = json_get_string(params, "name");
+                    let args: String = json_get_field(params, "arguments");
+
+                    if tool_name == "host_resolve" {
+                        let target: String = json_get_string(args, "target");
+                        let mut opts: HostOpts = default_host_opts();
+                        opts.target = target;
+                        opts.rtype = "ANY";
+                        let res: HostResponse = resolve_host(fs, opts);
+                        let text_out: String = render_response_bind(res, false, false, false);
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(text_out) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "host_reverse" {
+                        let ip_val: String = json_get_string(args, "ip");
+                        let mut opts: HostOpts = default_host_opts();
+                        opts.target = ip_val;
+                        opts.is_reverse = true;
+                        let res: HostResponse = resolve_host(fs, opts);
+                        let text_out: String = render_response_bind(res, false, false, false);
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(text_out) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "host_records" {
+                        let target: String = json_get_string(args, "target");
+                        let rtype_val: String = json_get_string(args, "type");
+                        let actual_type: String = if chars_len(rtype_val) > 0 { rtype_val } else { "ANY" };
+                        let mut opts: HostOpts = default_host_opts();
+                        opts.target = target;
+                        opts.rtype = actual_type;
+                        if actual_type == "ANY" || actual_type == "any" { opts.all_records = true; }
+                        let res: HostResponse = resolve_host(fs, opts);
+                        let text_out: String = render_response_bind(res, false, false, false);
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(text_out) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "host_inspect" {
+                        let target: String = json_get_string(args, "target");
+                        let server_val: String = json_get_string(args, "server");
+                        let mut opts: HostOpts = default_host_opts();
+                        opts.target = target;
+                        opts.server = server_val;
+                        opts.verbose = true;
+                        opts.rtype = "ANY";
+                        opts.all_records = true;
+                        let res: HostResponse = resolve_host(fs, opts);
+                        let text_out: String = render_response_bind(res, false, true, false);
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(text_out) + "\"}]}}";
+                        println(resp);
+                    } else if tool_name == "host_demo" {
+                        let demo_out: String = render_demo_showcase(false);
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"" + json_escape(demo_out) + "\"}]}}";
+                        println(resp);
+                    } else {
+                        let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                            ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+                        println(resp);
+                    }
+                } else {
+                    let resp: String = "{\"jsonrpc\":\"2.0\",\"id\":" + id +
+                        ",\"error\":{\"code\":-32601,\"message\":\"Method not found\"}}";
+                    println(resp);
+                }
+            }
+        }
+    }
+}

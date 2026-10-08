@@ -1,7 +1,7 @@
 # Maintainer: openOODA-tools <ops@openooda.org>
 pkgname=oohost-bin
 _pkgname=oohost
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Quick DNS address resolver performing forward and reverse host conversions."
 arch=('x86_64')

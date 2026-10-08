@@ -1,0 +1,114 @@
+// # BIND Standard Host Output Renderer
+//
+// Logline: Formats DNS answers into standard BIND host terminal syntax and verbose reports.
+//
+// Setup: Pure string formatting routines supporting standard, terse, and verbose modes.
+//
+// Beats:
+//   1. Render individual records into canonical BIND phrases (has address, mail is handled by, etc).
+//   2. Format terse address lists for unix pipeline and script consumption.
+//   3. Render verbose DNS diagnostic summaries with query latency and nameserver tags.
+//   4. Export terminal-ready response string builders.
+
+import "core/host_types.oo";
+
+fn ansi_esc() -> String {
+    return bytes_to_str(bytes_push(bytes_new(), 27));
+}
+
+pub fn render_record_bind(rec: HostRecord, short_mode: Bool) -> String {
+    if short_mode {
+        return rec.data + "\n";
+    }
+
+    let rtype: String = rec.rtype;
+    let name: String = rec.name;
+    let data: String = rec.data;
+
+    if rtype == "A" {
+        return name + " has address " + data + "\n";
+    }
+    if rtype == "AAAA" {
+        return name + " has IPv6 address " + data + "\n";
+    }
+    if rtype == "MX" {
+        return name + " mail is handled by " + data + "\n";
+    }
+    if rtype == "TXT" {
+        return name + " descriptive text " + data + "\n";
+    }
+    if rtype == "CNAME" {
+        return name + " is an alias for " + data + "\n";
+    }
+    if rtype == "PTR" {
+        return name + " domain name pointer " + data + "\n";
+    }
+    if rtype == "NS" {
+        return name + " name server " + data + "\n";
+    }
+    if rtype == "SOA" {
+        return name + " has SOA record " + data + "\n";
+    }
+    return name + " has " + rtype + " record " + data + "\n";
+}
+
+pub fn render_response_bind(
+    resp: HostResponse,
+    short_mode: Bool,
+    verbose: Bool,
+    use_color: Bool
+) -> String {
+    if resp.is_error {
+        let prefix: String = if use_color {
+            ansi_esc() + "[31mHost " + resp.target + " not found: " + resp.error_msg + ansi_esc() + "[0m\n"
+        } else {
+            "Host " + resp.target + " not found: " + resp.error_msg + "\n"
+        };
+        return prefix;
+    }
+
+    let num_records: Int = list_len(resp.records);
+    if num_records == 0 {
+        return "Host " + resp.target + " not found: 3(NXDOMAIN)\n";
+    }
+
+    if verbose {
+        let mut v: String = "";
+        let esc: String = ansi_esc();
+        let s_hdr: String = if use_color {
+            esc + "[1mTrying \"" + resp.target + "\"\n" + esc + "[0m"
+        } else {
+            "Trying \"" + resp.target + "\"\n"
+        };
+        v = v + s_hdr;
+        v = v + "Using domain server:\n";
+        v = v + "Name: " + resp.server + "\n";
+        v = v + "Address: " + resp.server + "#" + to_string(resp.port) + "\n";
+        v = v + "Aliases:\n\n";
+        v = v + ";; ->>HEADER<<- opcode: QUERY, status: " + resp.status + ", id: 1842\n";
+        v = v + ";; flags: qr rd ra; QUERY: 1, ANSWER: " + to_string(num_records) + ", AUTHORITY: 0, ADDITIONAL: 0\n\n";
+        v = v + ";; QUESTION SECTION:\n";
+        v = v + ";" + resp.target + ".\t\t\tIN\t" + resp.query_type + "\n\n";
+        v = v + ";; ANSWER SECTION:\n";
+
+        let mut i: Int = 0;
+        while i < num_records {
+            let r: HostRecord = list_get(resp.records, i);
+            let line: String = r.name + ".\t\t" + to_string(r.ttl) + "\t" + r.class_name + "\t" + r.rtype + "\t" + r.data + "\n";
+            v = v + line;
+            i = i + 1;
+        }
+
+        v = v + "\nReceived " + to_string(num_records * 48) + " bytes from " + resp.server + "#" + to_string(resp.port) + " in " + to_string(resp.latency_ms) + " ms\n";
+        return v;
+    }
+
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < num_records {
+        let r: HostRecord = list_get(resp.records, i);
+        out = out + render_record_bind(r, short_mode);
+        i = i + 1;
+    }
+    return out;
+}

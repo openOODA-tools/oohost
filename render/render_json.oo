@@ -1,0 +1,42 @@
+// # JSON Telemetry and Response Serializer
+//
+// Logline: Formats host resolution results and individual records into RFC 8259 JSON.
+//
+// Setup: Pure string serialization without external JSON libraries.
+//
+// Beats:
+//   1. Serialize individual HostRecord entries into typed JSON objects.
+//   2. Serialize complete HostResponse queries with records array and latency metrics.
+//   3. Handle error states with structured failure diagnostics.
+//   4. Export JSON serializers for CLI -j flag and MCP JSON-RPC handlers.
+
+import "core/host_types.oo";
+
+pub fn record_to_json(r: HostRecord) -> String {
+    return "{\"name\":\"" + r.name + "\""
+        + ",\"ttl\":" + to_string(r.ttl)
+        + ",\"class\":\"" + r.class_name + "\""
+        + ",\"type\":\"" + r.rtype + "\""
+        + ",\"data\":\"" + r.data + "\"}";
+}
+
+pub fn response_to_json(resp: HostResponse) -> String {
+    let mut out: String = "{\"target\":\"" + resp.target + "\""
+        + ",\"query_type\":\"" + resp.query_type + "\""
+        + ",\"server\":\"" + resp.server + "\""
+        + ",\"port\":" + to_string(resp.port)
+        + ",\"status\":\"" + resp.status + "\""
+        + ",\"latency_ms\":" + to_string(resp.latency_ms)
+        + ",\"is_error\":" + (if resp.is_error { "true" } else { "false" })
+        + ",\"records\":[";
+
+    let n: Int = list_len(resp.records);
+    let mut i: Int = 0;
+    while i < n {
+        if i > 0 { out = out + ","; }
+        out = out + record_to_json(list_get(resp.records, i));
+        i = i + 1;
+    }
+    out = out + "]}";
+    return out;
+}

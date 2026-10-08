@@ -1,0 +1,59 @@
+// # Render Subsystem Verification Anchor
+//
+// Logline: Automated self-tests for BIND syntax formatting, JSON serialization, and demo generation.
+//
+// Setup: Exercises record phrase generators, JSON serializers, and demonstration layouts.
+//
+// Beats:
+//   1. Verify standard BIND host record phrase generation across A, AAAA, MX, and PTR types.
+//   2. Verify terse address extraction for pipeline integration.
+//   3. Verify RFC 8259 JSON response telemetry generation.
+//   4. Export render verification predicate for integration test harness.
+
+import "core/host_types.oo";
+import "render/render_bind.oo";
+import "render/render_json.oo";
+import "render/render_demo.oo";
+
+pub fn verify_render() -> Bool {
+    // Test 1: BIND standard record rendering
+    let rec_a: HostRecord = make_host_record("example.com", 300, "IN", "A", "93.184.215.14");
+    let line_a: String = render_record_bind(rec_a, false);
+    if str_contains(line_a, "example.com has address 93.184.215.14") == false {
+        return false;
+    }
+
+    let rec_mx: HostRecord = make_host_record("example.com", 3600, "IN", "MX", "10 mail.example.com.");
+    let line_mx: String = render_record_bind(rec_mx, false);
+    if str_contains(line_mx, "mail is handled by 10 mail.example.com.") == false {
+        return false;
+    }
+
+    // Test 2: Terse mode
+    let short_a: String = render_record_bind(rec_a, true);
+    if str_trim(short_a) != "93.184.215.14" {
+        return false;
+    }
+
+    // Test 3: Response rendering
+    let mut resp: HostResponse = empty_host_response("example.com", "A");
+    resp.records = list_push(resp.records, rec_a);
+    let rendered_resp: String = render_response_bind(resp, false, false, false);
+    if str_contains(rendered_resp, "has address") == false {
+        return false;
+    }
+
+    // Test 4: JSON response rendering
+    let json_resp: String = response_to_json(resp);
+    if str_contains(json_resp, "\"target\":\"example.com\"") == false || str_contains(json_resp, "\"93.184.215.14\"") == false {
+        return false;
+    }
+
+    // Test 5: Demo showcase
+    let demo_txt: String = render_demo_showcase(false);
+    if str_contains(demo_txt, "oohost: Sovereign openOODA Host Resolver Demo") == false {
+        return false;
+    }
+
+    return true;
+}

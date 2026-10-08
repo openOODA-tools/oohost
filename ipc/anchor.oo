@@ -1,0 +1,57 @@
+// # IPC Subsystem Verification Anchor
+//
+// Logline: Automated self-tests for CLI flag decoding, argument vectors, and JSON extraction.
+//
+// Setup: Exercises JSON token parsing and CLI argument decoding without ambient authority.
+//
+// Beats:
+//   1. Verify JSON field parsing and string unescaping.
+//   2. Verify JSON escaping for outgoing MCP frames.
+//   3. Verify CLI options parsing across target, record types, and terse/verbose switches.
+//   4. Export IPC verification predicate for integration test harness.
+
+import "ipc/json_field.oo";
+import "ipc/cli_options.oo";
+
+pub fn verify_ipc() -> Bool {
+    // Test 1: JSON field extraction
+    let sample: String = "{\"id\":42,\"method\":\"tools/call\",\"params\":{\"name\":\"host_resolve\",\"target\":\"example.com\"}}";
+    if json_get_field(sample, "id") != "42" || json_get_string(sample, "method") != "tools/call" {
+        return false;
+    }
+
+    // Test 2: JSON escaping & unescaping
+    let escaped: String = json_escape("line1\nline2\t\"quoted\"");
+    if str_contains(escaped, "\\n") == false || str_contains(escaped, "\\\"") == false {
+        return false;
+    }
+    let unescaped: String = json_unescape("line1\\nline2");
+    if str_contains(unescaped, "\n") == false {
+        return false;
+    }
+
+    // Test 3: CLI options parsing
+    let mut args: List[String] = list_new();
+    args = list_push(args, "-t");
+    args = list_push(args, "mx");
+    args = list_push(args, "-s");
+    args = list_push(args, "-v");
+    args = list_push(args, "example.com");
+    args = list_push(args, "1.1.1.1");
+
+    let opts: CliParsedOptions = parse_cli_options(args);
+    if opts.rtype != "MX" || opts.short_mode == false || opts.verbose == false {
+        return false;
+    }
+    if opts.target != "example.com" || opts.server != "1.1.1.1" {
+        return false;
+    }
+
+    // Test 4: Default CLI options
+    let def_opts: CliParsedOptions = default_cli_options();
+    if def_opts.port != 53 || def_opts.short_mode {
+        return false;
+    }
+
+    return true;
+}
